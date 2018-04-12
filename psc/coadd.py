@@ -241,7 +241,7 @@ class Coadder():
         for i,obs in enumerate(self.observations):
 
             offset = self._get_offsets(obs.meta['offset_pixels'])
-            psf_offset = self._get_offsets(obs.meta['psf_offset_pixels'])
+            psf_offset = self._get_offsets(obs.psf.meta['offset_pixels'])
             image_center = self.canonical_center + offset
             psf_image_center = self.psf_canonical_center + psf_offset
 
