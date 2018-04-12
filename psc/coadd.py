@@ -1,7 +1,4 @@
 """
-convert a set of observations produced by
-nsim (https://github.com/esheldon/nsim) to
-a coadd using Galsim to do the interpolation
 """
 
 import ngmix
