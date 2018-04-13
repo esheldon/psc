@@ -258,6 +258,8 @@ class Coadder():
         self.psf_ny=pny
 
 
+        # we reset the center of the jacobian to
+        # the canonical center later
         if self.jacobian is not None:
             jac = self.jacobian.copy()
             pjac = self.jacobian.copy()
