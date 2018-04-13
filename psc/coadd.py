@@ -11,6 +11,7 @@ class Coadder():
                  observations,
                  interp='lanczos3',
                  flat_wcs=False,
+                 jacobian=None,
                  rng=None):
         """
         parameters
@@ -29,6 +30,7 @@ class Coadder():
         self.observations = observations
         self.interp = interp
         self.flat_wcs=flat_wcs
+        self.jacobian=jacobian
         self.rng=rng
 
         # use a nominal sky position
@@ -141,10 +143,82 @@ class Coadder():
 
         coadd_obs.psf.set_image(coadd_psf_image)
 
+    def _set_coadd_obs_same(self):
+        """
+        base the wcs for the coadd off the first observation
+        """
+
+        for i,obs in enumerate(self.observations):
+            if i==0:
+                ny,nx = obs.image.shape
+                pny,pnx = obs.psf.image.shape
+            else:
+                tny,tnx = obs.image.shape
+                tpny,tpnx = obs.psf.image.shape
+
+                if ny != tny or nx != tnx:
+                    raise ValueError(
+                        "ps sizes don't match: "
+                        "[%d,%d] vs [%d,%d]" % (ny,nx,tny,tnx)
+                    )
+                if pny != tpny or pnx != tpnx:
+                    raise ValueError(
+                        "psf ps sizes don't match: "
+                        "[%d,%d] vs [%d,%d]" % (pny,pnx,tpny,tpnx)
+                    )
+
+        tim = galsim.ImageD(nx,ny)
+        self.canonical_center = tim.true_center
+
+        ptim = galsim.ImageD(pnx,pny)
+        self.psf_canonical_center = ptim.true_center
+
+        self.nx=nx
+        self.ny=ny
+        self.psf_nx=pnx
+        self.psf_ny=pny
+
+        obs0 = self.observations[0]
+
+        ojac = obs0.jacobian
+        opjac = obs0.psf.jacobian
+
+        if self.flat_wcs:
+            jac = ngmix.DiagonalJacobian(
+                row=ojac.get_row0(),
+                col=ojac.get_col0(),
+                scale=ojac.get_scale(),
+            )
+            pjac = ngmix.DiagonalJacobian(
+                row=opjac.get_row0(),
+                col=opjac.get_col0(),
+                scale=opjac.get_scale(),
+            )
+        else:
+            jac = ojac.copy()
+            pjac = opjac.copy()
+
+        psf_obs = ngmix.Observation(
+            ptim.array,
+            weight=ptim.array*0 + 1.0,
+            jacobian=pjac,
+        )
+
+        self.coadd_obs = ngmix.Observation(
+            tim.array,
+            weight=tim.array*0 + 1.0,
+            jacobian=jac,
+            psf=psf_obs,
+        )
+
     def _set_coadd_obs(self):
         """
         base the coadd off the observation with largest
         postage stamp
+
+        But for consistency, we always take the jacobian
+        from the first. This way we always know which
+        wcs has been used
         """
         nxs=np.zeros(len(self.observations),dtype='i8')
         nys=nxs.copy()
@@ -183,25 +257,29 @@ class Coadder():
         self.psf_nx=pnx
         self.psf_ny=pny
 
-        tobs = self.observations[argx]
 
-        ojac = tobs.jacobian
-        opjac = tobs.psf.jacobian
-
-        if self.flat_wcs:
-            jac = ngmix.DiagonalJacobian(
-                row=ojac.get_row0(),
-                col=ojac.get_col0(),
-                scale=ojac.get_scale(),
-            )
-            pjac = ngmix.DiagonalJacobian(
-                row=opjac.get_row0(),
-                col=opjac.get_col0(),
-                scale=opjac.get_scale(),
-            )
+        if self.jacobian is not None:
+            jac = self.jacobian.copy()
+            pjac = self.jacobian.copy()
         else:
-            jac = ojac.copy()
-            pjac = opjac.copy()
+
+            obs0 = self.observations[0]
+            ojac = obs0.jacobian
+            opjac = obs0.psf.jacobian
+            if self.flat_wcs:
+                jac = ngmix.DiagonalJacobian(
+                    row=ojac.get_row0(),
+                    col=ojac.get_col0(),
+                    scale=ojac.get_scale(),
+                )
+                pjac = ngmix.DiagonalJacobian(
+                    row=opjac.get_row0(),
+                    col=opjac.get_col0(),
+                    scale=opjac.get_scale(),
+                )
+            else:
+                jac = ojac.copy()
+                pjac = opjac.copy()
 
         psf_obs = ngmix.Observation(
             ptim.array,
@@ -215,6 +293,7 @@ class Coadder():
             jacobian=jac,
             psf=psf_obs,
         )
+
 
     def _get_offsets(self, offset_pixels):
         if offset_pixels is None:
