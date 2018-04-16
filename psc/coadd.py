@@ -83,11 +83,9 @@ class Coadder():
 
         currently only support the canonical center
         """
+        obs = self.coadd_obs
         cen = self.canonical_center
-        self.coadd_obs.jacobian.set_cen(
-            row=cen.y-1,
-            col=cen.x-1,
-        )
+        self._set_jacobian_cen(obs, cen)
 
     def _set_coadd_psf_jacobian_cen(self):
         """
@@ -95,11 +93,24 @@ class Coadder():
 
         currently only support the canonical center
         """
+        obs = self.coadd_obs.psf
         cen = self.psf_canonical_center
-        self.coadd_obs.psf.jacobian.set_cen(
-            row=cen.y-1,
-            col=cen.x-1,
+        self._set_jacobian_cen(obs, cen)
+
+    def _set_jacobian_cen(self, obs, gs_pos):
+        """
+        set the center
+
+        currently only support the canonical center
+        """
+        # makes a copy
+        j=obs.jacobian
+        j.set_cen(
+            row=gs_pos.y-1,
+            col=gs_pos.x-1,
         )
+        obs.jacobian = j
+
 
     def _set_coadded_image(self):
         """
