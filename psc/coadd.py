@@ -11,8 +11,7 @@ class Coadder():
                  observations,
                  interp='lanczos3',
                  flat_wcs=False,
-                 jacobian=None,
-                 rng=None):
+                 jacobian=None):
         """
         parameters
         -----------
@@ -24,14 +23,11 @@ class Coadder():
         flat_wcs: bool
             If True, make the coadd have a flat wcs.  Default is
             to use the WCS of the first observation in the list
-        rng: galsim random deviate, optional
-            for creating the noise images 
         """
         self.observations = observations
         self.interp = interp
         self.flat_wcs=flat_wcs
         self.jacobian=jacobian
-        self.rng=rng
 
         # use a nominal sky position
         self.sky_center = galsim.CelestialCoord(
@@ -154,6 +150,12 @@ class Coadder():
 
         coadd_obs.psf.set_image(coadd_psf_image)
 
+    def _get_canonical_center(self, im):
+        if hasattr(im,'true_center'):
+            cen = im.true_center
+        else:
+            cen = im.trueCenter()
+        return cen
     def _set_coadd_obs_same(self):
         """
         base the wcs for the coadd off the first observation
@@ -179,10 +181,9 @@ class Coadder():
                     )
 
         tim = galsim.ImageD(nx,ny)
-        self.canonical_center = tim.true_center
-
         ptim = galsim.ImageD(pnx,pny)
-        self.psf_canonical_center = ptim.true_center
+        self.canonical_center = self._get_canonical_center(tim)
+        self.psf_canonical_center = self._get_canonical_center(ptim)
 
         self.nx=nx
         self.ny=ny
@@ -258,10 +259,10 @@ class Coadder():
         pny = pnys[pargy]
 
         tim = galsim.ImageD(nx,ny)
-        self.canonical_center = tim.true_center
-
         ptim = galsim.ImageD(pnx,pny)
-        self.psf_canonical_center = ptim.true_center
+        self.canonical_center = self._get_canonical_center(tim)
+        self.psf_canonical_center = self._get_canonical_center(ptim)
+
 
         self.nx=nx
         self.ny=ny
