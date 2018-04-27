@@ -1,6 +1,6 @@
 """
 """
-
+from __future__ import print_function
 import ngmix
 import numpy as np
 import galsim
@@ -11,6 +11,7 @@ class Coadder():
                  observations,
                  interp='lanczos3',
                  flat_wcs=False,
+                 weight_type='noise',
                  jacobian=None):
         """
         parameters
@@ -23,11 +24,19 @@ class Coadder():
         flat_wcs: bool
             If True, make the coadd have a flat wcs.  Default is
             to use the WCS of the first observation in the list
+        weight_type: string
+            Either 'noise' for inverse variance weights, or
+            noise-fwhm for 1/(v*fwhm**2) weights
+        jacobian: ngmix Jacobian
+            target jacobian for coadd
         """
         self.observations = observations
         self.interp = interp
         self.flat_wcs=flat_wcs
         self.jacobian=jacobian
+
+        assert weight_type in ['noise','noise-fwhm']
+        self.weight_type=weight_type
 
         # use a nominal sky position
         self.sky_center = galsim.CelestialCoord(
@@ -326,7 +335,7 @@ class Coadder():
         """
         self.images = []
         self.psfs = []
-        self.vars = np.zeros(len(self.observations))
+        self.weights = np.zeros(len(self.observations))
         self.noise_images = []
 
         self._set_coadd_obs()
@@ -334,7 +343,9 @@ class Coadder():
         for i,obs in enumerate(self.observations):
 
             offset = self._get_offsets(obs.meta['offset_pixels'])
+            #print("offset:",offset)
             psf_offset = self._get_offsets(obs.psf.meta['offset_pixels'])
+            #print("psf offset:",psf_offset)
             image_center = self.canonical_center + offset
             psf_image_center = self.psf_canonical_center + psf_offset
 
@@ -384,8 +395,11 @@ class Coadder():
             self.psfs.append(psf)
 
             # assume variance is constant
-            var = 1./obs.weight.max()
-            self.vars[i] = var
+            wt = obs.weight.max()
+            if self.weight_type=='noise-fwhm':
+                fwhm=measure_fwhm(psf_image)
+                wt /= fwhm**4
+            self.weights[i] = wt
 
             # use input noise image
             noise_image = galsim.InterpolatedImage(
@@ -396,5 +410,36 @@ class Coadder():
 
             self.noise_images.append(noise_image)
 
-        self.weights = 1./self.vars
         self.weights /= self.weights.sum()
+
+
+def measure_fwhm(image, smooth=0.1):
+    """
+    Measure the FWHM
+    
+    parameters
+    ----------
+    image: 2-d darray
+        The image to measure
+    smooth: float
+        The smoothing scale for the erf.  This should be between 0 and 1. If
+        you have noisy data, you might set this to the noise value or greater,
+        scaled by the max value in the images.  Otherwise just make sure it
+        smooths enough to avoid pixelization effects.
+    """
+    from scipy.special import erf
+    from math import sqrt, pi
+
+    thresh=0.5
+    nim = image.copy()
+    maxval=image.max()
+    nim *= (1./maxval)
+
+    arg = (nim-thresh)/smooth
+
+    vals = 0.5*( 1+erf(arg) )
+
+    area = vals.sum()
+    width = 2*sqrt(area/pi)
+
+    return width
